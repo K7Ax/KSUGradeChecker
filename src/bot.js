@@ -55,50 +55,73 @@ export function createBot({ onPaired } = {}) {
   });
 
   bot.on('callback_query:data', async (ctx) => {
-    if (!isOwner(ctx)) return ctx.answerCallbackQuery();
+    // Always answer first so the button never keeps spinning, even if something
+    // below throws. We then refine the toast text per outcome.
+    const data = ctx.callbackQuery.data ?? '';
+    console.log(`[bot] button pressed: "${data}" by ${ctx.from?.id}`);
 
-    const data = ctx.callbackQuery.data;
-    const sep = data.indexOf(':');
-    const gameId = data.slice(0, sep);
-    const choice = data.slice(sep + 1);
-    const game = getGame(gameId);
+    try {
+      if (!isOwner(ctx)) {
+        await ctx.answerCallbackQuery();
+        return;
+      }
 
-    if (!game) {
-      await ctx.answerCallbackQuery({ text: 'This game has ended.', show_alert: false });
-      await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
-      return;
+      const sep = data.indexOf(':');
+      const gameId = data.slice(0, sep);
+      const choice = data.slice(sep + 1);
+      const game = getGame(gameId);
+
+      if (!game) {
+        await ctx.answerCallbackQuery({ text: 'انتهت هذي اللعبة 👍' });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+        return;
+      }
+
+      // Reveal button.
+      if (choice === '__SHOW__') {
+        endGame(gameId);
+        await ctx.answerCallbackQuery();
+        await ctx.editMessageText(
+          `👀 درجتك في *${escapeMd(game.courseName)}* هي *${escapeMd(game.actualGrade)}*`,
+          { parse_mode: 'MarkdownV2' },
+        ).catch(() => {});
+        return;
+      }
+
+      // Correct guess.
+      if (choice === game.actualGrade) {
+        const tries = (game.attempts ?? 0) + 1;
+        endGame(gameId);
+        await ctx.answerCallbackQuery({ text: '🎉 صدقت!' });
+        await ctx.editMessageText(
+          `🎉 صدقت\\! درجتك *${escapeMd(game.actualGrade)}* في ` +
+            `*${escapeMd(game.courseName)}* \\(من ${tries} ${tries === 1 ? 'محاولة' : 'محاولات'}\\)`,
+          { parse_mode: 'MarkdownV2' },
+        ).catch(() => {});
+        return;
+      }
+
+      // Wrong guess — let them retry, keyboard stays.
+      updateGame(gameId, { attempts: (game.attempts ?? 0) + 1 });
+      await ctx.answerCallbackQuery({ text: `❌ مو ${choice} — جرّب ثانية!`, show_alert: false });
+    } catch (err) {
+      console.error('[bot] callback error:', err);
+      // Make sure the spinner always stops.
+      await ctx.answerCallbackQuery().catch(() => {});
     }
-
-    // Reveal button.
-    if (choice === '__SHOW__') {
-      endGame(gameId);
-      await ctx.answerCallbackQuery();
-      await ctx.editMessageText(
-        `👀 Your grade in *${escapeMd(game.courseName)}* is *${escapeMd(game.actualGrade)}*`,
-        { parse_mode: 'MarkdownV2' },
-      ).catch(() => {});
-      return;
-    }
-
-    // Correct guess.
-    if (choice === game.actualGrade) {
-      const tries = (game.attempts ?? 0) + 1;
-      endGame(gameId);
-      await ctx.answerCallbackQuery({ text: '🎉 Correct!' });
-      await ctx.editMessageText(
-        `🎉 Correct\\! You scored *${escapeMd(game.actualGrade)}* in ` +
-          `*${escapeMd(game.courseName)}* \\(in ${tries} ${tries === 1 ? 'try' : 'tries'}\\)`,
-        { parse_mode: 'MarkdownV2' },
-      ).catch(() => {});
-      return;
-    }
-
-    // Wrong guess — let them retry, keyboard stays.
-    updateGame(gameId, { attempts: (game.attempts ?? 0) + 1 });
-    await ctx.answerCallbackQuery({ text: `❌ Not ${choice} — try again!`, show_alert: false });
   });
 
-  bot.catch((err) => console.error('[bot] error:', err.error ?? err));
+  bot.catch((err) => {
+    const e = err?.error ?? err;
+    if (e?.error_code === 409) {
+      console.error(
+        '[bot] ⚠️ CONFLICT (409): another copy of this bot is already running with the same token. ' +
+          'Close every other "npm start" window and keep only ONE running.',
+      );
+    } else {
+      console.error('[bot] error:', e);
+    }
+  });
 
   /** Send a new-grade guessing game (letter grades) or a plain reveal (statuses). */
   async function startGame(result) {
