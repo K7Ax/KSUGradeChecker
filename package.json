@@ -5,8 +5,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "login": "node src/login.js",
+    "postinstall": "playwright install chromium",
+    "prestart": "npm install",
     "start": "node src/index.js",
+    "login": "node src/login.js",
     "scrape": "node src/scrape-once.js"
   },
   "dependencies": {

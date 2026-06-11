@@ -40,8 +40,7 @@ export function assertRuntimeConfig() {
   // time you send /start to the bot, so users never have to copy it by hand.
   if (!BOT_TOKEN) {
     throw new Error(
-      'Missing BOT_TOKEN. Open the ".env" file and paste your Telegram bot token ' +
-        '(get it from @BotFather), then run: npm start',
+      'ما لقيت BOT_TOKEN. افتح ملف ".env" وحط رمز البوت (تجيبه من @BotFather)، وبعدها شغّل: npm start',
     );
   }
 }

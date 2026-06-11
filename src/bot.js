@@ -38,18 +38,15 @@ export function createBot({ onPaired } = {}) {
     if (!owner) {
       // Not linked yet → the first person to /start becomes the owner.
       setOwnerId(ctx.chat.id);
-      await ctx.reply(
-        '✅ تم الربط! ستصلك درجاتك هنا تلقائيًا.\n' +
-          '✅ Linked! Your grades will be sent to you here automatically.',
-      );
+      await ctx.reply('✅ تم الربط! من الحين بتوصلك درجاتك هني على طول 🎉');
       onPaired?.();
       return;
     }
 
     if (isOwner(ctx)) {
-      await ctx.reply('✅ أنت متصل. سأراسلك عند ظهور أي درجة جديدة.\n✅ Connected — I will message you when a new grade is posted.');
+      await ctx.reply('✅ انت مربوط زين. أول ما تطلع درجة جديدة بكلّمك 👌');
     } else {
-      await ctx.reply('🔒 This bot is already linked to another user.');
+      await ctx.reply('🔒 هذا البوت مربوط بشخص ثاني.');
     }
   });
 

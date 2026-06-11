@@ -11,11 +11,11 @@ const examplePath = path.join(root, '.env.example');
 
 if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
   fs.copyFileSync(examplePath, envPath);
-  console.log('\n✅ Created your settings file: .env');
-  console.log('👉 Open ".env" in a text editor and fill in:');
-  console.log('     BOT_TOKEN          (from @BotFather on Telegram)');
-  console.log('     EDUGATE_USERNAME   (your edugate username)');
-  console.log('     EDUGATE_PASSWORD   (your edugate password)');
-  console.log('   Save the file, then run:  npm start\n');
+  console.log('\n✅ جهّزت لك ملف الإعدادات: .env');
+  console.log('👉 افتح ملف ".env" وعبّي ٣ خانات بس:');
+  console.log('     BOT_TOKEN          ← رمز البوت من @BotFather');
+  console.log('     EDUGATE_USERNAME   ← اسم المستخدم في إيدوجيت');
+  console.log('     EDUGATE_PASSWORD   ← كلمة المرور حقتك');
+  console.log('   احفظ الملف، وبعدها اكتب:  npm start\n');
   process.exit(0);
 }
