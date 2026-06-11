@@ -38,7 +38,7 @@ export function createBot({ onPaired } = {}) {
     if (!owner) {
       // Not linked yet → the first person to /start becomes the owner.
       setOwnerId(ctx.chat.id);
-      await ctx.reply('✅ تم الربط! من الحين بتوصلك درجاتك هني على طول 🎉');
+      await ctx.reply('✅ تم الربط! من الحين بتوصلك درجاتك هنا على طول 🎉');
       onPaired?.();
       return;
     }

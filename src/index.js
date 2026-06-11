@@ -36,7 +36,7 @@ async function main() {
   if (ownerKnown()) {
     startLoop();
   } else {
-    console.log('👉 روح تيليجرام، افتح بوتك، وارسل له /start عشان يرتبط فيك — وبعدها بتجيك درجاتك لحالها.');
+    console.log('Open Telegram, go to your bot, and send /start to link it. Your grades will arrive automatically.');
   }
 
   const shutdown = async () => {
