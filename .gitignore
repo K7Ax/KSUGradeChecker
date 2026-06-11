@@ -1,0 +1,8 @@
+node_modules/
+data/
+*.log
+
+# Secrets — never commit. Keep only .env.example tracked.
+.env
+.env.*
+!.env.example

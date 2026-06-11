@@ -1,0 +1,17 @@
+{
+  "name": "ksu-grade-checker",
+  "version": "1.0.0",
+  "description": "Watches KSU edugate for new course results and runs a Telegram grade-guessing game.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "login": "node src/login.js",
+    "start": "node src/index.js",
+    "scrape": "node src/scrape-once.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "playwright": "^1.48.0"
+  }
+}
