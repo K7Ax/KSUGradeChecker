@@ -1,3 +1,4 @@
+import './ensure-env.js'; // creates .env from .env.example on first run
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,12 +36,12 @@ export const EDUGATE_PASSWORD = process.env.EDUGATE_PASSWORD || '';
 export const HAS_CREDENTIALS = Boolean(EDUGATE_USERNAME && EDUGATE_PASSWORD);
 
 export function assertRuntimeConfig() {
-  const missing = [];
-  if (!BOT_TOKEN) missing.push('BOT_TOKEN');
-  if (!CHAT_ID) missing.push('CHAT_ID');
-  if (missing.length) {
+  // Only BOT_TOKEN is truly required up front. CHAT_ID is auto-linked the first
+  // time you send /start to the bot, so users never have to copy it by hand.
+  if (!BOT_TOKEN) {
     throw new Error(
-      `Missing required env: ${missing.join(', ')}. Copy .env.example to .env and fill it in.`,
+      'Missing BOT_TOKEN. Open the ".env" file and paste your Telegram bot token ' +
+        '(get it from @BotFather), then run: npm start',
     );
   }
 }

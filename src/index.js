@@ -1,15 +1,17 @@
-import { assertRuntimeConfig, POLL_MS } from './config.js';
+import { assertRuntimeConfig, POLL_MS, CHAT_ID } from './config.js';
 import { createBot } from './bot.js';
 import { checkOnce } from './checker.js';
+import { getOwnerId } from './store.js';
+
+function ownerKnown() {
+  return Boolean(CHAT_ID || getOwnerId());
+}
 
 async function main() {
   assertRuntimeConfig();
 
-  const bot = createBot();
   const flags = { expiryNotified: false, authDisabled: false };
-
-  // Start the Telegram bot (long polling) without blocking the loop below.
-  bot.bot.start({ onStart: (me) => console.log(`[bot] @${me.username} started.`) });
+  let timer = null;
 
   const tick = async () => {
     try {
@@ -19,13 +21,27 @@ async function main() {
     }
   };
 
-  await tick(); // immediate first check
-  const timer = setInterval(tick, POLL_MS);
-  console.log(`[loop] checking edugate every ${Math.round(POLL_MS / 1000)}s.`);
+  // Start the checking loop (only once). Called either at startup if we already
+  // know the owner, or right after the user links the bot via /start.
+  const startLoop = () => {
+    if (timer) return;
+    tick(); // immediate first check
+    timer = setInterval(tick, POLL_MS);
+    console.log(`[loop] checking edugate every ${Math.round(POLL_MS / 1000)}s.`);
+  };
+
+  const bot = createBot({ onPaired: startLoop });
+  bot.bot.start({ onStart: (me) => console.log(`[bot] @${me.username} started.`) });
+
+  if (ownerKnown()) {
+    startLoop();
+  } else {
+    console.log('👉 Open Telegram, find your bot, and send /start to link it. Then grades will arrive automatically.');
+  }
 
   const shutdown = async () => {
     console.log('\n[shutdown] stopping…');
-    clearInterval(timer);
+    if (timer) clearInterval(timer);
     await bot.bot.stop();
     process.exit(0);
   };

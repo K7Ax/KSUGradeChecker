@@ -1,23 +1,56 @@
 import { Bot } from 'grammy';
 import { BOT_TOKEN, CHAT_ID } from './config.js';
 import { buildGameKeyboard, isLetterGrade } from './grades.js';
-import { createGame, getGame, updateGame, endGame, nextGameId } from './store.js';
+import {
+  createGame,
+  getGame,
+  updateGame,
+  endGame,
+  nextGameId,
+  getOwnerId,
+  setOwnerId,
+} from './store.js';
 
-const ownerId = String(CHAT_ID);
-
-function isOwner(ctx) {
-  return String(ctx.chat?.id ?? ctx.from?.id) === ownerId;
+// The owner chat id comes from CHAT_ID in .env if set, otherwise from the value
+// auto-linked the first time someone sends /start. Resolved live (not cached) so
+// pairing takes effect immediately.
+function resolveOwner() {
+  return CHAT_ID || getOwnerId();
 }
 
-export function createBot() {
+function isOwner(ctx) {
+  const owner = resolveOwner();
+  return Boolean(owner) && String(ctx.chat?.id ?? ctx.from?.id) === String(owner);
+}
+
+/**
+ * @param {object} [opts]
+ * @param {() => void} [opts.onPaired] - called once the bot links to a chat, so
+ *   the caller can kick off the checking loop.
+ */
+export function createBot({ onPaired } = {}) {
   const bot = new Bot(BOT_TOKEN);
 
-  // Handy for first-time setup: tell the user their chat id.
+  // /start links the bot to you (first time) or confirms you're connected.
   bot.command('start', async (ctx) => {
-    await ctx.reply(
-      `👋 KSU Grade Checker is connected.\nYour chat id is: ${ctx.chat.id}\n` +
-        (isOwner(ctx) ? '✅ This matches CHAT_ID — you are all set.' : '⚠️ Put this id in CHAT_ID in your .env.'),
-    );
+    const owner = resolveOwner();
+
+    if (!owner) {
+      // Not linked yet → the first person to /start becomes the owner.
+      setOwnerId(ctx.chat.id);
+      await ctx.reply(
+        '✅ تم الربط! ستصلك درجاتك هنا تلقائيًا.\n' +
+          '✅ Linked! Your grades will be sent to you here automatically.',
+      );
+      onPaired?.();
+      return;
+    }
+
+    if (isOwner(ctx)) {
+      await ctx.reply('✅ أنت متصل. سأراسلك عند ظهور أي درجة جديدة.\n✅ Connected — I will message you when a new grade is posted.');
+    } else {
+      await ctx.reply('🔒 This bot is already linked to another user.');
+    }
   });
 
   bot.command('ping', async (ctx) => {
@@ -72,6 +105,12 @@ export function createBot() {
 
   /** Send a new-grade guessing game (letter grades) or a plain reveal (statuses). */
   async function startGame(result) {
+    const target = resolveOwner();
+    if (!target) {
+      console.warn('[bot] no linked chat yet — send /start to the bot to link it.');
+      return;
+    }
+
     if (!isLetterGrade(result.grade)) {
       await notify(
         `🎓 New result for *${escapeMd(result.courseName)}*: *${escapeMd(result.grade)}*`,
@@ -88,30 +127,36 @@ export function createBot() {
       attempts: 0,
     });
     await bot.api.sendMessage(
-      CHAT_ID,
+      target,
       `🎓 New result posted for *${escapeMd(result.courseName)}*\\!\nGuess your grade 👇`,
       { parse_mode: 'MarkdownV2', reply_markup: buildGameKeyboard(id) },
     );
   }
 
   async function notify(text) {
-    await bot.api.sendMessage(CHAT_ID, text, { parse_mode: 'MarkdownV2' }).catch(async () => {
+    const target = resolveOwner();
+    if (!target) return;
+    await bot.api.sendMessage(target, text, { parse_mode: 'MarkdownV2' }).catch(async () => {
       // Fallback to plain text if Markdown escaping ever fails.
-      await bot.api.sendMessage(CHAT_ID, text.replace(/\\/g, ''));
+      await bot.api.sendMessage(target, text.replace(/\\/g, ''));
     });
   }
 
   async function notifySessionExpired() {
+    const target = resolveOwner();
+    if (!target) return;
     await bot.api.sendMessage(
-      CHAT_ID,
-      '🔐 edugate session expired. Run `npm run login` on the PC to reconnect ' +
-        '(or set EDUGATE_USERNAME/EDUGATE_PASSWORD in .env for automatic re-login).',
+      target,
+      '🔐 edugate session expired. Set EDUGATE_USERNAME/EDUGATE_PASSWORD in .env for ' +
+        'automatic re-login, or run `npm run login` on the PC to reconnect.',
     );
   }
 
   async function notifyAuthFailed(reason) {
+    const target = resolveOwner();
+    if (!target) return;
     await bot.api.sendMessage(
-      CHAT_ID,
+      target,
       `⚠️ Automatic re-login failed: ${reason}\n` +
         'Auto-login is paused to protect your account. Fix EDUGATE_PASSWORD in .env ' +
         'and restart, or run `npm run login`.',
