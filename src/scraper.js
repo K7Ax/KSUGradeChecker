@@ -19,6 +19,48 @@ export class SessionExpiredError extends Error {
   }
 }
 
+// Cap the browser launch so a stuck launch fails fast instead of leaking a
+// half-spawned Chrome for the full 180s default (which previously snowballed
+// into resource starvation as orphans piled up).
+const LAUNCH_TIMEOUT_MS = 60_000;
+
+/**
+ * Load and validate the saved Playwright storage state. A missing, empty, or
+ * unparseable auth.json is treated as an expired session so the caller's
+ * auto-login recovery kicks in instead of dead-looping on a generic error.
+ * (An interrupted storageState write can truncate the file to 0 bytes.)
+ * @returns {object} parsed storage-state object.
+ * @throws {SessionExpiredError} when no usable session is on disk.
+ */
+function loadAuthState() {
+  let raw;
+  try {
+    raw = fs.readFileSync(AUTH_FILE, 'utf8');
+  } catch {
+    throw new SessionExpiredError('no saved session — run `npm run login`');
+  }
+  if (!raw.trim()) {
+    throw new SessionExpiredError('saved session is empty — re-authenticating');
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new SessionExpiredError('saved session is corrupt — re-authenticating');
+  }
+}
+
+/**
+ * Persist the context's storage state atomically: write to a temp file then
+ * rename over AUTH_FILE. rename is atomic on the same volume, so a crash or kill
+ * mid-write can never leave a truncated (0-byte) auth.json behind.
+ */
+export async function saveAuthState(context) {
+  const state = await context.storageState();
+  const tmp = `${AUTH_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(state));
+  fs.renameSync(tmp, AUTH_FILE);
+}
+
 const RESULTS_LINK_TEXT = 'نتائج المقررات';
 // The grades grid; ":" must be escaped for a CSS id selector.
 const RESULTS_TABLE_SELECTOR = '#myForm\\:courseTable';
@@ -56,7 +98,7 @@ export async function autoLogin({ headless = true } = {}) {
   if (!HAS_CREDENTIALS) {
     throw new LoginFailedError('no credentials set (EDUGATE_USERNAME / EDUGATE_PASSWORD)');
   }
-  const browser = await chromium.launch({ headless });
+  const browser = await chromium.launch({ headless, timeout: LAUNCH_TIMEOUT_MS });
   const context = await browser.newContext({
     viewport: { width: 1366, height: 900 },
     userAgent: USER_AGENT,
@@ -74,7 +116,7 @@ export async function autoLogin({ headless = true } = {}) {
       await page.waitForTimeout(1000);
       const url = page.url();
       if (/\/ui\/student\//i.test(url) && !looksLikeLogin(url)) {
-        await context.storageState({ path: AUTH_FILE });
+        await saveAuthState(context);
         return true;
       }
     }
@@ -94,11 +136,13 @@ export async function autoLogin({ headless = true } = {}) {
  * @returns {Promise<{results: Array, rawTables?: string[]}>}
  */
 export async function scrape({ headless = true, dumpHtml = false } = {}) {
-  if (!fs.existsSync(AUTH_FILE)) throw new SessionExpiredError('no saved session — run `npm run login`');
+  // Throws SessionExpiredError if auth.json is missing, empty, or corrupt — so
+  // checker.js recovers via auto-login instead of dead-looping on a raw error.
+  const storageState = loadAuthState();
 
-  const browser = await chromium.launch({ headless });
+  const browser = await chromium.launch({ headless, timeout: LAUNCH_TIMEOUT_MS });
   const context = await browser.newContext({
-    storageState: AUTH_FILE,
+    storageState,
     viewport: { width: 1366, height: 900 },
     userAgent: USER_AGENT,
   });
@@ -123,7 +167,7 @@ export async function scrape({ headless = true, dumpHtml = false } = {}) {
     if (looksLikeLogin(page.url())) throw new SessionExpiredError();
 
     // Refresh the saved session so any rotated cookies / extended expiry persist.
-    await context.storageState({ path: AUTH_FILE }).catch(() => {});
+    await saveAuthState(context).catch(() => {});
 
     const term = detectTerm(await page.content());
 

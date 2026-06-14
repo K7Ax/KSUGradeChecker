@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
-import { PROFILE_DIR, DATA_DIR, AUTH_FILE, LOGIN_URL, USER_AGENT } from './config.js';
+import { PROFILE_DIR, DATA_DIR, LOGIN_URL, USER_AGENT } from './config.js';
+import { saveAuthState } from './scraper.js';
 
 /**
  * Manual interactive login — an optional fallback to the automatic credential
@@ -43,9 +44,9 @@ async function main() {
     // Settle, then capture the FULL storage state — this includes the JSESSIONID
     // session cookie that the persistent profile would otherwise drop on close.
     await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {});
-    await context.storageState({ path: AUTH_FILE });
+    await saveAuthState(context);
     console.log(`✅ Login confirmed (now at ${page.url()}).`);
-    console.log(`   Session saved to ${AUTH_FILE}.`);
+    console.log('   Session saved.');
     console.log('   TIP: navigate to "نتائج المقررات" now and copy its URL into');
     console.log('   RESULTS_URL in your .env for a faster, more reliable scrape.');
     console.log('   You can now run: npm start');
